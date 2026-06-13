@@ -1,0 +1,36 @@
+[env]
+TERM = "xterm-256color"
+
+[window]
+decorations="Buttonless"
+dynamic_padding = true
+startup_mode = "Windowed"
+padding.x = 10
+padding.y = 10
+
+opacity = 0.7
+blur = true
+
+option_as_alt = "Both"
+
+[font.bold]
+family = "JetBrainsMono Nerd Font"
+style = "Bold"
+
+[font.bold_italic]
+family = "JetBrainsMono Nerd Font"
+style = "Italic"
+
+[font.italic]
+family = "JetBrainsMono Nerd Font"
+style = "Italic"
+
+[font.normal]
+family = "JetBrainsMono Nerd Font"
+style = "Regular"
+
+[font]
+size = 16.0
+
+[scrolling]
+history = 10000
