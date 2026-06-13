@@ -1,0 +1,46 @@
+---
+description: Bite-sized commits, conventional messages, human validation before each commit
+alwaysApply: true
+---
+
+# Commits: bite-sized, conventional, validated
+
+## Conventional Commits
+
+Shape: `type(scope optional): imperative subject` (subject ~≤72 chars; body optional for *why*). [Spec](https://www.conventionalcommits.org/)
+
+Types: `feat` (user-visible), `fix`, `refactor` (same behaviour), `test`, `docs`, `chore` (tooling/deps/config), `style` (format only), `perf`, `ci`.
+
+```text
+feat(auth): add session refresh on 401
+fix(courses): handle empty bucket list without throwing
+refactor(api): extract course loader for reuse
+test(e2e): cover checkout happy path
+chore(deps): bump next to 16.x
+```
+
+Avoid vague subjects (`update`, `wip`), unrelated changes in one commit, mixing `feat` and `fix` in one commit.
+
+## Bite-sized commits
+
+One commit = one logical slice a reviewer can follow without chat context; keep the tree green (build/tests when applicable).
+
+## Features: steps + human gate
+
+For non-trivial features:
+
+1. **Outline bite-sized steps** (ordered checklist); each step ends in a committable slice.
+2. **Pause for human validation** on the list and order; adjust on feedback.
+3. **One step → one commit** with a conventional suggested message; repeat. Do not batch unrelated steps unless the user asks.
+
+If they skip validation: still show the step list once, then proceed step-by-step with one commit per slice.
+
+## When proposing a commit
+
+Give one primary line plus optional `Alt:` only when typing is ambiguous:
+
+```text
+Suggested: feat(scope): imperative subject
+```
+
+After they confirm or edit, commit using their wording.

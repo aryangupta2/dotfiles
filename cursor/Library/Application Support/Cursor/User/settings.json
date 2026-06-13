@@ -1,0 +1,25 @@
+{
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 1,
+    "github.copilot.enable": {
+        "*": false,
+        "plaintext": false,
+        "markdown": false,
+        "scminput": false,
+        "html": false
+    },
+    "liveServer.settings.donotShowInfoMsg": true,
+    "git.openRepositoryInParentFolders": "never",
+    "liveServer.settings.donotVerifyTags": true,
+    "workbench.startupEditor": "none",
+    "cursor.cpp.disabledLanguages": [
+        "plaintext",
+        "markdown",
+        "scminput",
+        "html"
+    ],
+    "python.defaultInterpreterPath": "/usr/local/bin/python3",
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "window.autoDetectColorScheme": false,
+    "cursor.composer.usageSummaryDisplay": "always"
+}
