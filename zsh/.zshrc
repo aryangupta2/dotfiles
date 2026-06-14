@@ -122,6 +122,10 @@ eval "$(fzf --zsh)"
 
 alias ls="eza --color=always --long --git --no-filesize --icons=always --no-time --no-user --no-permissions"
 
+# ---- Bat (better cat) -----
+
+alias cat="bat"
+
 # thefuck alias
 eval $(thefuck --alias)
 
