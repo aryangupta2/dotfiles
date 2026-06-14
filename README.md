@@ -20,7 +20,7 @@ Re-running `./bootstrap.sh` is safe: it restows packages and reconciles the Brew
 .dotfiles/
 ├── bootstrap.sh      # installer + stow
 ├── Brewfile          # Homebrew formulae, casks, MAS apps
-├── zsh/              # ~/.zshrc
+├── zsh/              # ~/.zshrc, ~/.zprofile, ~/.p10k.zsh, ~/.bash_profile
 ├── git/              # ~/.gitconfig
 ├── config/           # ~/.config/{alacritty,aerospace,thefuck,gh}
 ├── cursor/           # ~/.cursor/rules/* and ~/Library/Application Support/Cursor/User/*

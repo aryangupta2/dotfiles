@@ -47,7 +47,7 @@ Options:
   -h, --help        Show this help
 
 Packages (default: all):
-  zsh     ~/.zshrc
+  zsh     ~/.zshrc, ~/.zprofile, ~/.p10k.zsh, ~/.bash_profile
   git     ~/.gitconfig
   config  ~/.config/{alacritty,aerospace,thefuck,gh}
   cursor  ~/.cursor/rules/* and Cursor User settings
