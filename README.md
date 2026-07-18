@@ -22,7 +22,7 @@ Re-running `./bootstrap.sh` is safe: it restows packages and reconciles the Brew
 ├── Brewfile          # Homebrew formulae, casks, MAS apps
 ├── zsh/              # ~/.zshrc, ~/.zprofile, ~/.p10k.zsh, ~/.bash_profile
 ├── git/              # ~/.gitconfig
-├── config/           # ~/.config/{alacritty,aerospace,thefuck,gh}
+├── config/           # ~/.config/{alacritty,gh}
 ├── cursor/           # ~/.cursor/rules/* and ~/Library/Application Support/Cursor/User/*
 └── agents/           # ~/.agents/skills/* and .skill-lock.json
 ```

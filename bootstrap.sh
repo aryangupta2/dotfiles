@@ -49,7 +49,7 @@ Options:
 Packages (default: all):
   zsh     ~/.zshrc, ~/.zprofile, ~/.p10k.zsh, ~/.bash_profile
   git     ~/.gitconfig
-  config  ~/.config/{alacritty,aerospace,thefuck,gh}
+  config  ~/.config/{alacritty,gh}
   cursor  ~/.cursor/rules/* and Cursor User settings
   agents  ~/.agents/skills/* and .skill-lock.json
 
@@ -240,15 +240,18 @@ Manual steps that cannot be fully automated:
   1. SSH keys: generate with `ssh-keygen` and add the public key to GitHub.
      Do NOT commit private keys to this repo.
   2. GitHub CLI auth: run `gh auth login` (creates ~/.config/gh/hosts.yml locally).
-  3. Bun (optional): curl -fsSL https://bun.sh/install | bash
-  4. Install apps not managed by Homebrew:
+  3. Sign in to the Mac App Store before/while brew bundle runs if MAS apps fail
+     (Outlook, The Camelizer).
+  4. Optional tooling (shell sources these only if present):
+     - Bun: curl -fsSL https://bun.sh/install | bash
+     - uv:  curl -LsSf https://astral.sh/uv/install.sh | sh
+  5. Install apps not managed by Homebrew:
      - Cursor — download from https://cursor.com; sign in and install extensions
      - DaVinci Resolve
      - LockDown Browser
-  5. App licenses and MAS apps: install/sign in to Outlook, The Camelizer, etc.
-  6. Secrets/passwords: use 1Password or another secret manager as needed.
-  7. AeroSpace: grant Accessibility permissions in System Settings if prompted.
-  8. Powerlevel10k: run `p10k configure` if you want to regenerate the prompt.
+  6. App licenses and MAS apps: install/sign in to Outlook, The Camelizer, etc.
+  7. Powerlevel10k: run `p10k configure` only if you want to regenerate the prompt
+     (a committed ~/.p10k.zsh is already stowed).
 
 Re-run safely:
   ./bootstrap.sh --skip-brew              # restow all packages
