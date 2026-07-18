@@ -1,4 +1,3 @@
-tap "nikitabobko/tap"
 # Clone of cat(1) with syntax highlighting and Git integration
 brew "bat"
 # Pack, ship and run any application as a lightweight container
@@ -27,6 +26,8 @@ cask "alacritty"
 cask "discord"
 # Docker Desktop for building and sharing containerized applications
 cask "docker"
+# Developer-targeted fonts with a high number of glyphs
+cask "font-jetbrains-mono-nerd-font"
 # Note-taking and workspace application
 cask "notion"
 # Productivity launcher and command bar for macOS
