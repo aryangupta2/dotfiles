@@ -116,7 +116,7 @@ source $ZSH/oh-my-zsh.sh
 # ---- FZF -----
 
 # Set up fzf key bindings and fuzzy completion
-eval "$(fzf --zsh)"
+command -v fzf >/dev/null && eval "$(fzf --zsh)"
 
 # ---- Eza (better ls) -----
 
@@ -126,18 +126,16 @@ alias ls="eza --color=always --long --git --no-filesize --icons=always --no-time
 
 alias cat="bat"
 
-# thefuck alias
-eval $(thefuck --alias)
-
 # ---- Zoxide (better cd) ----
-eval "$(zoxide init zsh)"
+command -v zoxide >/dev/null && eval "$(zoxide init zsh)" && alias cd="z"
 
-alias cd="z"
 alias python="python3"
 alias pip="pip3"
-# bun completions
-[ -s "/Users/aryangupta/.bun/_bun" ] && source "/Users/aryangupta/.bun/_bun"
 
-# bun
+# bun (optional — install via bootstrap manual step)
 export BUN_INSTALL="$HOME/.bun"
-export PATH="$BUN_INSTALL/bin:$PATH"
+[[ -d "$BUN_INSTALL/bin" ]] && export PATH="$BUN_INSTALL/bin:$PATH"
+[[ -s "$BUN_INSTALL/_bun" ]] && source "$BUN_INSTALL/_bun"
+
+# uv / ~/.local/bin (optional — created by uv installer)
+[[ -f "$HOME/.local/bin/env" ]] && . "$HOME/.local/bin/env"
