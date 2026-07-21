@@ -32,6 +32,8 @@ cask "font-jetbrains-mono-nerd-font"
 cask "notion"
 # Productivity launcher and command bar for macOS
 cask "raycast"
+# Database GUI for MySQL, PostgreSQL, SQLite, and more
+cask "beekeeper-studio"
 
 # Manually installed apps inventory (non-Homebrew or not yet mapped to casks):
 # - Cursor
