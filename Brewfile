@@ -38,6 +38,5 @@ cask "cursor"
 cask "microsoft-outlook"
 
 # Manually installed apps inventory (non-Homebrew or not yet mapped to casks):
-# - Cursor
 # - DaVinci Resolve
 # - LockDown Browser
