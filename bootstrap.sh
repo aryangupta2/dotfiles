@@ -47,7 +47,7 @@ Options:
   -h, --help        Show this help
 
 Packages (default: all):
-  zsh     ~/.zshrc, ~/.zprofile, ~/.p10k.zsh, ~/.bash_profile
+  zsh     ~/.zshrc, ~/.p10k.zsh
   git     ~/.gitconfig
   config  ~/.config/{alacritty,gh}
   cursor  ~/.cursor/rules/* and Cursor User settings
@@ -141,6 +141,29 @@ install_brewfile() {
   run brew bundle install --file="${DOTFILES_DIR}/Brewfile"
 }
 
+ensure_default_shell_zsh() {
+  local zsh_path="/bin/zsh"
+
+  [[ -x "$zsh_path" ]] || return 0
+
+  if [[ "${SHELL:-}" == "$zsh_path" ]]; then
+    log "Default shell: already ${zsh_path}"
+    return
+  fi
+
+  if (( DRY_RUN )); then
+    run chsh -s "$zsh_path"
+    return
+  fi
+
+  log "Setting default shell to ${zsh_path} (may prompt for password)..."
+  if chsh -s "$zsh_path"; then
+    log "Default shell set to zsh (takes effect in new terminal sessions)"
+  else
+    warn "Could not change default shell. Run: chsh -s ${zsh_path}"
+  fi
+}
+
 install_oh_my_zsh() {
   if [[ -d "${HOME_DIR}/.oh-my-zsh" ]]; then
     log "Oh My Zsh: already installed"
@@ -182,6 +205,7 @@ install_omz_customizations() {
   clone_omz_theme powerlevel10k https://github.com/romkatv/powerlevel10k.git
   clone_omz_plugin zsh-autosuggestions https://github.com/zsh-users/zsh-autosuggestions.git
   clone_omz_plugin zsh-syntax-highlighting https://github.com/zsh-users/zsh-syntax-highlighting.git
+  clone_omz_plugin you-should-use https://github.com/MichaelAquilina/zsh-you-should-use.git
 }
 
 # Move an existing regular file/dir out of the way so stow can create a symlink.
@@ -191,12 +215,13 @@ backup_conflicting_path() {
   [[ -e "$target" || -L "$target" ]] || return 0
 
   if [[ -L "$target" ]]; then
-    local link_dest
-    link_dest="$(readlink "$target")"
-    if [[ "$link_dest" == "${DOTFILES_DIR}"/* ]]; then
+    local resolved
+    # Stow often uses relative links (e.g. .dotfiles/zsh/.zshrc); resolve before comparing.
+    resolved="$(realpath "$target" 2>/dev/null || true)"
+    if [[ -n "$resolved" && "$resolved" == "${DOTFILES_DIR}"/* ]]; then
       return 0
     fi
-    warn "Replacing existing symlink: ${target} -> ${link_dest}"
+    warn "Replacing existing symlink: ${target} -> $(readlink "$target")"
   else
     warn "Backing up existing path: ${target}"
   fi
@@ -234,23 +259,20 @@ stow_packages() {
 print_manual_steps() {
   cat <<'EOF'
 
-Bootstrap complete.
+Bootstrap complete. Open a new terminal tab/window to load the stowed shell config.
 
 Manual steps that cannot be fully automated:
   1. SSH keys: generate with `ssh-keygen` and add the public key to GitHub.
      Do NOT commit private keys to this repo.
   2. GitHub CLI auth: run `gh auth login` (creates ~/.config/gh/hosts.yml locally).
-  3. Sign in to the Mac App Store before/while brew bundle runs if MAS apps fail
-     (Outlook, The Camelizer).
-  4. Optional tooling (shell sources these only if present):
-     - Bun: curl -fsSL https://bun.sh/install | bash
-     - uv:  curl -LsSf https://astral.sh/uv/install.sh | sh
-  5. Install apps not managed by Homebrew:
+  3. Optional: uv (shell sources ~/.local/bin/env only if present):
+       curl -LsSf https://astral.sh/uv/install.sh | sh
+  4. Install apps not managed by Homebrew:
      - Cursor — download from https://cursor.com; sign in and install extensions
      - DaVinci Resolve
      - LockDown Browser
-  6. App licenses and MAS apps: install/sign in to Outlook, The Camelizer, etc.
-  7. Powerlevel10k: run `p10k configure` only if you want to regenerate the prompt
+  5. App licenses / sign-in for installed apps as needed.
+  6. Powerlevel10k: run `p10k configure` only if you want to regenerate the prompt
      (a committed ~/.p10k.zsh is already stowed).
 
 Re-run safely:
@@ -279,6 +301,7 @@ main() {
     ensure_homebrew
     install_brewfile
     install_omz_customizations
+    ensure_default_shell_zsh
   fi
 
   stow_packages
