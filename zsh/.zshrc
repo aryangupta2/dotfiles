@@ -120,11 +120,11 @@ command -v fzf >/dev/null && eval "$(fzf --zsh)"
 
 # ---- Eza (better ls) -----
 
-alias ls="eza --color=always --long --git --no-filesize --icons=always --no-time --no-user --no-permissions"
+command -v eza >/dev/null && alias ls="eza --color=always --long --git --no-filesize --icons=always --no-time --no-user --no-permissions"
 
 # ---- Bat (better cat) -----
 
-alias cat="bat"
+command -v bat >/dev/null && alias cat="bat"
 
 # ---- Zoxide (better cd) ----
 command -v zoxide >/dev/null && eval "$(zoxide init zsh)" && alias cd="z"
@@ -132,10 +132,13 @@ command -v zoxide >/dev/null && eval "$(zoxide init zsh)" && alias cd="z"
 alias python="python3"
 alias pip="pip3"
 
-# bun (optional — install via bootstrap manual step)
-export BUN_INSTALL="$HOME/.bun"
-[[ -d "$BUN_INSTALL/bin" ]] && export PATH="$BUN_INSTALL/bin:$PATH"
-[[ -s "$BUN_INSTALL/_bun" ]] && source "$BUN_INSTALL/_bun"
+# bun: Homebrew puts the binary on PATH via brew shellenv (.zprofile).
+# Keep ~/.bun only if a prior curl install still exists.
+if [[ -d "$HOME/.bun/bin" ]]; then
+  export BUN_INSTALL="$HOME/.bun"
+  export PATH="$BUN_INSTALL/bin:$PATH"
+  [[ -s "$BUN_INSTALL/_bun" ]] && source "$BUN_INSTALL/_bun"
+fi
 
 # uv / ~/.local/bin (optional — created by uv installer)
 [[ -f "$HOME/.local/bin/env" ]] && . "$HOME/.local/bin/env"
