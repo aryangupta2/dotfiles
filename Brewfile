@@ -35,6 +35,7 @@ cask "raycast"
 # Database GUI for MySQL, PostgreSQL, SQLite, and more
 cask "beekeeper-studio"
 cask "cursor"
+cask "microsoft-outlook"
 
 # Manually installed apps inventory (non-Homebrew or not yet mapped to casks):
 # - Cursor
