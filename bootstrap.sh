@@ -211,16 +211,18 @@ install_omz_customizations() {
 # Move an existing regular file/dir out of the way so stow can create a symlink.
 backup_conflicting_path() {
   local target="$1"
+  local resolved
 
   [[ -e "$target" || -L "$target" ]] || return 0
 
+  # Skip anything that resolves inside the repo. Covers file symlinks and
+  # paths reached via a tree-folded directory symlink (stow without --no-folding).
+  resolved="$(realpath "$target" 2>/dev/null || true)"
+  if [[ -n "$resolved" && ( "$resolved" == "${DOTFILES_DIR}" || "$resolved" == "${DOTFILES_DIR}"/* ) ]]; then
+    return 0
+  fi
+
   if [[ -L "$target" ]]; then
-    local resolved
-    # Stow often uses relative links (e.g. .dotfiles/zsh/.zshrc); resolve before comparing.
-    resolved="$(realpath "$target" 2>/dev/null || true)"
-    if [[ -n "$resolved" && "$resolved" == "${DOTFILES_DIR}"/* ]]; then
-      return 0
-    fi
     warn "Replacing existing symlink: ${target} -> $(readlink "$target")"
   else
     warn "Backing up existing path: ${target}"
@@ -238,6 +240,7 @@ backup_stow_conflicts() {
 
   while IFS= read -r -d '' path; do
     [[ -f "$path" ]] || continue
+    [[ "$(basename "$path")" == .DS_Store ]] && continue
     backup_conflicting_path "${HOME_DIR}/${path#${pkg_root}/}"
   done < <(find "$pkg_root" -type f -print0)
 }
@@ -252,8 +255,11 @@ stow_packages() {
     backup_stow_conflicts "$pkg"
   done
 
+  # --no-folding: never replace a home directory with a symlink into the package
+  # (e.g. ~/.config -> config/.config), which makes backup/mv mutate the repo.
   log "Stowing into ${HOME_DIR}..."
-  run stow -v -R -d "${DOTFILES_DIR}" -t "${HOME_DIR}" "${SELECTED_PACKAGES[@]}"
+  run stow -v -R --no-folding --ignore='\.DS_Store' \
+    -d "${DOTFILES_DIR}" -t "${HOME_DIR}" "${SELECTED_PACKAGES[@]}"
 }
 
 print_manual_steps() {
