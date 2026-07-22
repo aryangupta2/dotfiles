@@ -21,5 +21,7 @@
     "python.defaultInterpreterPath": "/usr/local/bin/python3",
     "python-envs.defaultEnvManager": "ms-python.python:system",
     "window.autoDetectColorScheme": false,
-    "cursor.composer.usageSummaryDisplay": "always"
+    "cursor.composer.usageSummaryDisplay": "always",
+    "js/ts.updateImportsOnFileMove.enabled": "always",
+    "workbench.iconTheme": "material-icon-theme"
 }
