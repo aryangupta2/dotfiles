@@ -1,0 +1,3 @@
+anysphere.remote-containers
+anysphere.remote-ssh
+pkief.material-icon-theme
