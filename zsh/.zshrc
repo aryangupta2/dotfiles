@@ -138,16 +138,6 @@ command -v zoxide >/dev/null && eval "$(zoxide init zsh)" && alias cd="z"
 alias python="python3"
 alias pip="pip3"
 
-# bun: Homebrew puts the binary on PATH via brew shellenv (.zprofile).
-# Keep ~/.bun only if a prior curl install still exists.
-if [[ -d "$HOME/.bun/bin" ]]; then
-  export BUN_INSTALL="$HOME/.bun"
-  export PATH="$BUN_INSTALL/bin:$PATH"
-  [[ -s "$BUN_INSTALL/_bun" ]] && source "$BUN_INSTALL/_bun"
-fi
-
 # uv / ~/.local/bin (optional — created by uv installer)
 [[ -f "$HOME/.local/bin/env" ]] && . "$HOME/.local/bin/env"
 
-# bun completions
-[ -s "/Users/aryangupta/.bun/_bun" ] && source "/Users/aryangupta/.bun/_bun"
