@@ -138,6 +138,4 @@ command -v zoxide >/dev/null && eval "$(zoxide init zsh)" && alias cd="z"
 alias python="python3"
 alias pip="pip3"
 
-# uv / ~/.local/bin (optional — created by uv installer)
-[[ -f "$HOME/.local/bin/env" ]] && . "$HOME/.local/bin/env"
 
