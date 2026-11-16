@@ -3,7 +3,8 @@
 # bootstrap.sh — install Homebrew packages and symlink dotfiles on a fresh Mac.
 #
 # Usage:
-#   ./bootstrap.sh                          # full install (all packages)
+#   ./bootstrap.sh                          # interactive menus (in a terminal)
+#   ./bootstrap.sh --yes                    # full install, no prompts
 #   ./bootstrap.sh --skip-brew              # stow all packages only
 #   ./bootstrap.sh --skip-brew zsh          # stow one package (phased testing)
 #   ./bootstrap.sh --skip-brew zsh git      # stow selected packages
@@ -21,6 +22,11 @@ SKIP_BREW=0
 DRY_RUN=0
 ASSUME_YES=0
 [[ -n "${NONINTERACTIVE:-}" ]] && ASSUME_YES=1
+RUN_BREW=1
+RUN_OMZ=1
+RUN_SHELL=1
+RUN_STOW=1
+INSTALL_STOW=0
 REQUESTED_PACKAGES=()
 SELECTED_PACKAGES=()
 DONE_ITEMS=()
@@ -120,6 +126,7 @@ pick_many() {
   done
 
   read -r rows cols < <(stty size 2>/dev/null </dev/tty || echo "0 80")
+  if (( cols <= 0 )); then cols=80; fi
   # Redraw in place only when colors (and so a terminal) are on and the list fits on screen.
   if [[ -n "$RESET" ]] && (( count + 6 < rows )); then
     redraw=1
@@ -184,6 +191,7 @@ usage() {
 Usage: $(basename "$0") [options] [package ...]
 
 Install Homebrew packages and symlink dotfiles with GNU Stow.
+With no arguments in a terminal, menus let you pick what to run.
 
 Options:
   --skip-brew       Skip Homebrew, Brewfile, and Oh My Zsh setup
@@ -202,7 +210,8 @@ Packages (default: all):
 Examples:
   $(basename "$0") --skip-brew zsh              # phased: shell only
   $(basename "$0") --dry-run --skip-brew cursor # preview cursor symlinks
-  $(basename "$0")                              # full fresh-Mac install
+  $(basename "$0")                              # interactive setup
+  $(basename "$0") --yes                        # full fresh-Mac install, no prompts
 EOF
   exit "${1:-0}"
 }
@@ -406,7 +415,15 @@ backup_stow_conflicts() {
 }
 
 stow_packages() {
-  command -v stow &>/dev/null || die "GNU stow not found. Run without --skip-brew or: brew install stow"
+  if (( INSTALL_STOW )) && ! command -v stow &>/dev/null; then
+    log "Installing GNU stow"
+    run brew install stow
+  fi
+
+  if ! command -v stow &>/dev/null; then
+    (( DRY_RUN )) || die "GNU stow not found. Run without --skip-brew or: brew install stow"
+    warn "GNU stow is not installed yet; it would be installed by the Homebrew step"
+  fi
 
   for pkg in "${SELECTED_PACKAGES[@]}"; do
     log "Checking ${pkg} for conflicts"
@@ -443,6 +460,10 @@ print_summary() {
     done
   fi
 
+  if (( DRY_RUN )); then
+    return
+  fi
+
   printf '\n  %sBackups of replaced files%s\n' "$BOLD" "$RESET"
   if [[ -d "$BACKUP_DIR" ]]; then
     printf '  %s\n' "$(tilde "$BACKUP_DIR")"
@@ -474,29 +495,187 @@ EOF
   printf '%s\n' "$RESET"
 }
 
-main() {
-  banner
-  ensure_xcode_clt
+has_brew() { command -v brew &>/dev/null; }
 
-  if (( SKIP_BREW )); then
-    STEP_TOTAL=1
-    warn "Skipping Homebrew, Brewfile, Oh My Zsh and shell steps (--skip-brew)"
-  else
-    STEP_TOTAL=4
+# Prints "<linked> <total>": how many of a package's files are already symlinked into $HOME.
+package_link_count() {
+  local pkg_root="${DOTFILES_DIR}/$1" path resolved linked=0 total=0
+
+  while IFS= read -r -d '' path; do
+    if [[ "$(basename "$path")" == .DS_Store ]]; then continue; fi
+    total=$((total + 1))
+    resolved="$(realpath "${HOME_DIR}/${path#${pkg_root}/}" 2>/dev/null || true)"
+    if [[ "$resolved" == "$path" ]]; then linked=$((linked + 1)); fi
+  done < <(find "$pkg_root" -type f -print0)
+  printf '%d %d\n' "$linked" "$total"
+}
+
+missing() { printf '  %s✗ %s%s\n' "$DIM" "$*" "$RESET"; }
+
+show_detected_state() {
+  local pkg linked total
+
+  printf '  %sThis Mac%s\n' "$BOLD" "$RESET"
+  if has_brew; then ok "Homebrew"; else missing "Homebrew not installed"; fi
+  if command -v stow &>/dev/null; then ok "GNU stow"; else missing "GNU stow not installed"; fi
+  if [[ -d "${HOME_DIR}/.oh-my-zsh" ]]; then ok "Oh My Zsh"; else missing "Oh My Zsh not installed"; fi
+  if [[ "${SHELL:-}" == /bin/zsh ]]; then ok "Default shell is zsh"; else missing "Default shell is ${SHELL:-unknown}"; fi
+
+  printf '\n  %sDotfiles%s\n' "$BOLD" "$RESET"
+  for pkg in "${STOW_PACKAGES[@]}"; do
+    read -r linked total < <(package_link_count "$pkg")
+    if (( total > 0 && linked == total )); then
+      ok "${pkg} linked"
+    elif (( linked > 0 )); then
+      warn "${pkg}: ${linked} of ${total} files linked"
+    else
+      missing "${pkg} not linked"
+    fi
+  done
+}
+
+pkg_desc() {
+  case "$1" in
+    zsh)    printf '%s' "~/.zshrc, ~/.p10k.zsh" ;;
+    git)    printf '%s' "~/.gitconfig" ;;
+    config) printf '%s' "~/.config/{alacritty,gh}" ;;
+    cursor) printf '%s' "~/.cursor/rules/* and Cursor User settings" ;;
+    agents) printf '%s' "~/.agents/skills/* and .skill-lock.json" ;;
+  esac
+}
+
+print_plan() {
+  printf '\n  %sPlan%s\n' "$BOLD" "$RESET"
+  if (( RUN_BREW )); then log "Install Homebrew packages from the Brewfile"; fi
+  if (( RUN_OMZ )); then log "Install Oh My Zsh, powerlevel10k and plugins"; fi
+  if (( RUN_SHELL )); then log "Make zsh the default shell"; fi
+  if (( RUN_STOW )); then
+    if (( INSTALL_STOW )); then log "Install GNU stow with Homebrew"; fi
+    log "Stow dotfiles: ${SELECTED_PACKAGES[*]}"
+  fi
+}
+
+interactive_setup() {
+  local step pkg
+  local -a items=()
+
+  show_detected_state
+
+  pick_many "Steps" \
+    $'homebrew\tInstall Homebrew and Brewfile packages' \
+    $'ohmyzsh\tOh My Zsh, powerlevel10k and plugins' \
+    $'shell\tMake zsh the default shell' \
+    $'stow\tSymlink dotfiles into your home folder'
+  RUN_BREW=0 RUN_OMZ=0 RUN_SHELL=0 RUN_STOW=0
+  for step in ${PICKED[@]+"${PICKED[@]}"}; do
+    case "$step" in
+      homebrew) RUN_BREW=1 ;;
+      ohmyzsh)  RUN_OMZ=1 ;;
+      shell)    RUN_SHELL=1 ;;
+      stow)     RUN_STOW=1 ;;
+    esac
+  done
+
+  if (( RUN_STOW )); then
+    for pkg in "${STOW_PACKAGES[@]}"; do
+      items+=("${pkg}"$'\t'"$(pkg_desc "$pkg")")
+    done
+    pick_many "Dotfile packages" "${items[@]}"
+    SELECTED_PACKAGES=(${PICKED[@]+"${PICKED[@]}"})
+    if (( ${#SELECTED_PACKAGES[@]} == 0 )); then
+      warn "No packages selected; skipping the stow step"
+      RUN_STOW=0
+    fi
+  fi
+
+  if (( RUN_STOW && !RUN_BREW )) && ! command -v stow &>/dev/null; then
+    printf '\n'
+    if ! has_brew; then
+      warn "GNU stow needs Homebrew, which isn't installed. Select the Homebrew step to stow dotfiles."
+      RUN_STOW=0
+    elif ask_yn "GNU stow is not installed. Install it with Homebrew?" Y; then
+      INSTALL_STOW=1
+    else
+      warn "Skipping the stow step"
+      RUN_STOW=0
+    fi
+  fi
+
+  if (( RUN_BREW + RUN_OMZ + RUN_SHELL + RUN_STOW == 0 )); then
+    printf '\n'
+    ok "Nothing selected. Bye."
+    exit 0
+  fi
+
+  print_plan
+  choose_one "Ready?" "Proceed" "Dry run (preview only)" "Cancel"
+  case "$CHOICE" in
+    2) DRY_RUN=1 ;;
+    3) printf '\n'; ok "Cancelled. Nothing was changed."; exit 0 ;;
+  esac
+}
+
+run_steps() {
+  STEP_INDEX=0
+  STEP_TOTAL=$((RUN_BREW + RUN_OMZ + RUN_SHELL + RUN_STOW))
+  DONE_ITEMS=()
+
+  if (( RUN_BREW )); then
     section "Homebrew packages"
     ensure_homebrew
     install_brewfile
+  fi
 
+  if (( RUN_OMZ )); then
     section "Oh My Zsh"
     install_omz_customizations
+  fi
 
+  if (( RUN_SHELL )); then
     section "Default shell"
     ensure_default_shell_zsh
   fi
 
-  section "Stow dotfiles"
-  stow_packages
+  if (( RUN_STOW )); then
+    section "Stow dotfiles"
+    stow_packages
+  fi
+
   print_summary
+}
+
+main() {
+  local interactive=0
+
+  if (( $# == 0 && !ASSUME_YES )) && [[ -t 0 && -t 1 ]]; then
+    interactive=1
+  fi
+
+  # Homebrew may be installed but not yet on PATH in a fresh shell.
+  if ! has_brew && [[ -x /opt/homebrew/bin/brew ]]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  fi
+
+  banner
+  ensure_xcode_clt
+
+  if (( interactive )); then
+    printf '\n'
+    interactive_setup
+  elif (( SKIP_BREW )); then
+    RUN_BREW=0 RUN_OMZ=0 RUN_SHELL=0
+    warn "Skipping Homebrew, Brewfile, Oh My Zsh and shell steps (--skip-brew)"
+  fi
+
+  run_steps
+
+  if (( interactive && DRY_RUN )); then
+    printf '\n'
+    if ask_yn "Run it for real now?" N; then
+      DRY_RUN=0
+      run_steps
+    fi
+  fi
 }
 
 main "$@"
