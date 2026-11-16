@@ -12,6 +12,18 @@ chmod +x bootstrap.sh
 ./bootstrap.sh
 ```
 
+Run with no arguments, `bootstrap.sh` is interactive:
+
+1. Shows what's already set up on this Mac (Homebrew, stow, Oh My Zsh, default shell, which packages are linked).
+2. Lets you pick steps: Homebrew + Brewfile, Oh My Zsh, default shell, stow.
+3. Lets you pick individual Brewfile entries (CLI tools, apps, editor extensions). Only the chosen ones are installed, via a temporary Brewfile; the committed `Brewfile` is never edited.
+4. Lets you pick which stow packages to link.
+5. Shows the plan and asks: proceed, dry run, or cancel. After a dry run it offers to run for real.
+
+In menus, type numbers or ranges to toggle (`2 5-7`), `a` for all, `n` for none, and Enter to continue.
+
+To skip the menus and install everything, run `./bootstrap.sh --yes` (or set `NONINTERACTIVE=1`). Passing any flag or package name also skips the menus.
+
 Re-running `./bootstrap.sh` is safe: it restows packages and reconciles the Brewfile.
 
 ## Layout
@@ -95,7 +107,7 @@ Currently ignored (see `--ignore` in `stow_packages()` in `bootstrap.sh`):
 - `cursor/extensions/` — full extension bundles; install locally under `~/.cursor/extensions/`
 - `cursor/extensions.txt` — extension ID list (would otherwise land at `~/extensions.txt`)
 
-To exclude more paths, add a `--ignore='^dirname$'` pattern in `bootstrap.sh`.
+To exclude more paths, add a `--ignore='^dirname$'` pattern in `bootstrap.sh` and the matching name in `is_stow_ignored()` (used for conflict backups and the "linked" status screen).
 
 ### Tips
 
@@ -106,7 +118,8 @@ To exclude more paths, add a `--ignore='^dirname$'` pattern in `bootstrap.sh`.
 ## Options
 
 ```bash
-./bootstrap.sh                          # full install (brew + OMZ + all packages)
+./bootstrap.sh                          # interactive menus
+./bootstrap.sh --yes                    # full install (brew + OMZ + all packages), no prompts
 ./bootstrap.sh --skip-brew              # stow all packages
 ./bootstrap.sh --skip-brew <package>    # stow one or more packages
 ./bootstrap.sh --dry-run --skip-brew zsh
