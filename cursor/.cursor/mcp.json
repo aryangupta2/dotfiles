@@ -6,6 +6,10 @@
         "shadcn@latest",
         "mcp"
       ]
+    },
+    "xcode-tools": {
+      "command": "xcrun",
+      "args": ["mcpbridge"]
     }
   }
 }

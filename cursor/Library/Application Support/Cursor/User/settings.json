@@ -23,5 +23,11 @@
     "window.autoDetectColorScheme": false,
     "cursor.composer.usageSummaryDisplay": "always",
     "js/ts.updateImportsOnFileMove.enabled": "always",
-    "workbench.iconTheme": "material-icon-theme"
+    "workbench.iconTheme": "material-icon-theme",
+    "cursor.composer.shouldChimeAfterChatFinishes": false,
+    "cursor.general.glassShowWarningNotifications": true,
+    "cursor.composer.conversationDensity": "detailed",
+    "cursor.composer.codeBlockWordWrap": true,
+    "cursor.composer.queueManualSendBehavior2": "steer",
+    "cursor.composer.queueMessageDefaultBehavior": "steer"
 }
