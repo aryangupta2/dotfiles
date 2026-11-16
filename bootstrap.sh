@@ -13,7 +13,9 @@
 #
 set -euo pipefail
 
-DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# realpath normalizes case (~/desktop vs ~/Desktop) so this compares equal to
+# realpath of the stowed links; bash's pwd -P does not.
+DOTFILES_DIR="$(realpath "$(dirname "${BASH_SOURCE[0]}")")"
 HOME_DIR="${HOME:?HOME is not set}"
 BACKUP_DIR="${HOME_DIR}/.dotfiles-backup/$(date +%Y%m%d-%H%M%S)"
 STOW_PACKAGES=(zsh git config cursor agents)
