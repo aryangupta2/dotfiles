@@ -401,6 +401,14 @@ backup_conflicting_path() {
   run mv "$target" "${BACKUP_DIR}/${target#${HOME_DIR}/}"
 }
 
+# Keep in sync with the --ignore patterns passed to stow.
+is_stow_ignored() {
+  case "$(basename "$1")" in
+    .DS_Store|extensions.txt) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 backup_stow_conflicts() {
   local pkg="$1"
   local pkg_root="${DOTFILES_DIR}/${pkg}"
@@ -409,7 +417,7 @@ backup_stow_conflicts() {
 
   while IFS= read -r -d '' path; do
     [[ -f "$path" ]] || continue
-    [[ "$(basename "$path")" == .DS_Store ]] && continue
+    is_stow_ignored "$path" && continue
     backup_conflicting_path "${HOME_DIR}/${path#${pkg_root}/}"
   done < <(find "$pkg_root" -type f -print0)
 }
@@ -433,7 +441,7 @@ stow_packages() {
   # --no-folding: never replace a home directory with a symlink into the package
   # (e.g. ~/.config -> config/.config), which makes backup/mv mutate the repo.
   log "Stowing into $(tilde "$HOME_DIR")"
-  run stow -v -R --no-folding --ignore='\.DS_Store' \
+  run stow -v -R --no-folding --ignore='\.DS_Store' --ignore='extensions\.txt' \
     -d "${DOTFILES_DIR}" -t "${HOME_DIR}" "${SELECTED_PACKAGES[@]}"
   ok "Stowed: ${SELECTED_PACKAGES[*]}"
   DONE_ITEMS+=("Stowed packages: ${SELECTED_PACKAGES[*]}")
@@ -502,7 +510,7 @@ package_link_count() {
   local pkg_root="${DOTFILES_DIR}/$1" path resolved linked=0 total=0
 
   while IFS= read -r -d '' path; do
-    if [[ "$(basename "$path")" == .DS_Store ]]; then continue; fi
+    if is_stow_ignored "$path"; then continue; fi
     total=$((total + 1))
     resolved="$(realpath "${HOME_DIR}/${path#${pkg_root}/}" 2>/dev/null || true)"
     if [[ "$resolved" == "$path" ]]; then linked=$((linked + 1)); fi
