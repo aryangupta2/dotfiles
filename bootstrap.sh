@@ -21,14 +21,46 @@ SKIP_BREW=0
 DRY_RUN=0
 REQUESTED_PACKAGES=()
 SELECTED_PACKAGES=()
+DONE_ITEMS=()
+STEP_INDEX=0
+STEP_TOTAL=0
 
-log()  { printf '==> %s\n' "$*"; }
-warn() { printf '!!> %s\n' "$*" >&2; }
-die()  { warn "$*"; exit 1; }
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  BOLD=$'\033[1m' DIM=$'\033[2m' RED=$'\033[31m' GREEN=$'\033[32m'
+  YELLOW=$'\033[33m' BLUE=$'\033[34m' CYAN=$'\033[36m' RESET=$'\033[0m'
+else
+  BOLD='' DIM='' RED='' GREEN='' YELLOW='' BLUE='' CYAN='' RESET=''
+fi
+
+log()  { printf '  %s›%s %s\n' "$BLUE" "$RESET" "$*"; }
+ok()   { printf '  %s✓%s %s\n' "$GREEN" "$RESET" "$*"; }
+warn() { printf '  %s!%s %s\n' "$YELLOW" "$RESET" "$*" >&2; }
+die()  { printf '  %s✗%s %s\n' "$RED" "$RESET" "$*" >&2; exit 1; }
+
+section() {
+  STEP_INDEX=$((STEP_INDEX + 1))
+  printf '\n%s%s[%d/%d]%s %s%s%s\n' "$BOLD" "$CYAN" "$STEP_INDEX" "$STEP_TOTAL" "$RESET" "$BOLD" "$*" "$RESET"
+}
+
+tilde() {
+  case "$1" in
+    "$HOME_DIR"*) printf '~%s' "${1#"$HOME_DIR"}" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+banner() {
+  printf '\n  %s%sdotfiles bootstrap%s\n' "$BOLD" "$CYAN" "$RESET"
+  printf '  %s%s · macOS %s%s\n' "$DIM" "$(tilde "$DOTFILES_DIR")" "$(sw_vers -productVersion)" "$RESET"
+  if (( DRY_RUN )); then
+    printf '  %sdry run: nothing will be changed%s\n' "$YELLOW" "$RESET"
+  fi
+  printf '\n'
+}
 
 run() {
   if (( DRY_RUN )); then
-    printf '[dry-run] %s\n' "$*"
+    printf '  %s[dry-run] %s%s\n' "$DIM" "$*" "$RESET"
   else
     "$@"
   fi
@@ -110,7 +142,7 @@ resolve_packages
 
 ensure_xcode_clt() {
   if xcode-select -p &>/dev/null; then
-    log "Xcode Command Line Tools: already installed"
+    ok "Xcode Command Line Tools"
     return
   fi
 
@@ -121,11 +153,11 @@ ensure_xcode_clt() {
 
 ensure_homebrew() {
   if command -v brew &>/dev/null; then
-    log "Homebrew: $(brew --prefix)"
+    ok "Homebrew: $(brew --prefix)"
     return
   fi
 
-  log "Installing Homebrew..."
+  log "Installing Homebrew"
   run /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
   # Apple Silicon default path; harmless if already on PATH.
@@ -137,8 +169,10 @@ ensure_homebrew() {
 }
 
 install_brewfile() {
-  log "Installing packages from Brewfile..."
+  log "Installing packages from Brewfile"
   run brew bundle install --file="${DOTFILES_DIR}/Brewfile"
+  ok "Brewfile installed"
+  DONE_ITEMS+=("Homebrew packages from Brewfile")
 }
 
 ensure_default_shell_zsh() {
@@ -147,7 +181,7 @@ ensure_default_shell_zsh() {
   [[ -x "$zsh_path" ]] || return 0
 
   if [[ "${SHELL:-}" == "$zsh_path" ]]; then
-    log "Default shell: already ${zsh_path}"
+    ok "Default shell is already ${zsh_path}"
     return
   fi
 
@@ -156,9 +190,10 @@ ensure_default_shell_zsh() {
     return
   fi
 
-  log "Setting default shell to ${zsh_path} (may prompt for password)..."
+  log "Setting default shell to ${zsh_path} (may prompt for password)"
   if chsh -s "$zsh_path"; then
-    log "Default shell set to zsh (takes effect in new terminal sessions)"
+    ok "Default shell set to zsh (takes effect in new terminal sessions)"
+    DONE_ITEMS+=("Default shell set to zsh")
   else
     warn "Could not change default shell. Run: chsh -s ${zsh_path}"
   fi
@@ -166,9 +201,9 @@ ensure_default_shell_zsh() {
 
 install_oh_my_zsh() {
   if [[ -d "${HOME_DIR}/.oh-my-zsh" ]]; then
-    log "Oh My Zsh: already installed"
+    ok "Oh My Zsh"
   else
-    log "Installing Oh My Zsh..."
+    log "Installing Oh My Zsh"
     run env RUNZSH=no CHSH=no KEEP_ZSHRC=yes \
       sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
   fi
@@ -180,9 +215,9 @@ clone_omz_plugin() {
   local dest="${HOME_DIR}/.oh-my-zsh/custom/plugins/${name}"
 
   if [[ -d "${dest}/.git" ]]; then
-    log "OMZ plugin ${name}: already installed"
+    ok "Plugin ${name}"
   else
-    log "Installing OMZ plugin ${name}..."
+    log "Installing plugin ${name}"
     run git clone --depth=1 "${repo}" "${dest}"
   fi
 }
@@ -193,9 +228,9 @@ clone_omz_theme() {
   local dest="${HOME_DIR}/.oh-my-zsh/custom/themes/${name}"
 
   if [[ -d "${dest}/.git" ]]; then
-    log "OMZ theme ${name}: already installed"
+    ok "Theme ${name}"
   else
-    log "Installing OMZ theme ${name}..."
+    log "Installing theme ${name}"
     run git clone --depth=1 "${repo}" "${dest}"
   fi
 }
@@ -206,6 +241,7 @@ install_omz_customizations() {
   clone_omz_plugin zsh-autosuggestions https://github.com/zsh-users/zsh-autosuggestions.git
   clone_omz_plugin zsh-syntax-highlighting https://github.com/zsh-users/zsh-syntax-highlighting.git
   clone_omz_plugin you-should-use https://github.com/MichaelAquilina/zsh-you-should-use.git
+  DONE_ITEMS+=("Oh My Zsh with powerlevel10k and plugins")
 }
 
 # Move an existing regular file/dir out of the way so stow can create a symlink.
@@ -248,26 +284,51 @@ backup_stow_conflicts() {
 stow_packages() {
   command -v stow &>/dev/null || die "GNU stow not found. Run without --skip-brew or: brew install stow"
 
-  log "Stow packages: ${SELECTED_PACKAGES[*]}"
-
   for pkg in "${SELECTED_PACKAGES[@]}"; do
-    log "Preparing stow package: ${pkg}"
+    log "Checking ${pkg} for conflicts"
     backup_stow_conflicts "$pkg"
   done
 
   # --no-folding: never replace a home directory with a symlink into the package
   # (e.g. ~/.config -> config/.config), which makes backup/mv mutate the repo.
-  log "Stowing into ${HOME_DIR}..."
+  log "Stowing into $(tilde "$HOME_DIR")"
   run stow -v -R --no-folding --ignore='\.DS_Store' \
     -d "${DOTFILES_DIR}" -t "${HOME_DIR}" "${SELECTED_PACKAGES[@]}"
+  ok "Stowed: ${SELECTED_PACKAGES[*]}"
+  DONE_ITEMS+=("Stowed packages: ${SELECTED_PACKAGES[*]}")
 }
 
-print_manual_steps() {
+print_summary() {
+  local item
+
+  printf '\n'
+  if (( DRY_RUN )); then
+    printf '  %s%sDry run complete.%s Nothing was changed.\n' "$BOLD" "$YELLOW" "$RESET"
+  else
+    printf '  %s%sBootstrap complete.%s Open a new terminal to load the stowed shell config.\n' "$BOLD" "$GREEN" "$RESET"
+  fi
+
+  if (( ${#DONE_ITEMS[@]} )); then
+    if (( DRY_RUN )); then
+      printf '\n  %sWould have done%s\n' "$BOLD" "$RESET"
+    else
+      printf '\n  %sDone%s\n' "$BOLD" "$RESET"
+    fi
+    for item in "${DONE_ITEMS[@]}"; do
+      ok "$item"
+    done
+  fi
+
+  printf '\n  %sBackups of replaced files%s\n' "$BOLD" "$RESET"
+  if [[ -d "$BACKUP_DIR" ]]; then
+    printf '  %s\n' "$(tilde "$BACKUP_DIR")"
+  else
+    printf '  %snone (existing dotfiles were already symlinked)%s\n' "$DIM" "$RESET"
+  fi
+
+  printf '\n  %sManual steps%s\n' "$BOLD" "$RESET"
+  printf '%s' "$DIM"
   cat <<'EOF'
-
-Bootstrap complete. Open a new terminal tab/window to load the stowed shell config.
-
-Manual steps that cannot be fully automated:
   1. SSH keys: generate with `ssh-keygen` and add the public key to GitHub.
      Do NOT commit private keys to this repo.
   2. GitHub CLI auth: run `gh auth login` (creates ~/.config/gh/hosts.yml locally).
@@ -281,37 +342,37 @@ Manual steps that cannot be fully automated:
   6. Powerlevel10k: run `p10k configure` only if you want to regenerate the prompt
      (a committed ~/.p10k.zsh is already stowed).
 
-Re-run safely:
-  ./bootstrap.sh --skip-brew              # restow all packages
-  ./bootstrap.sh --skip-brew zsh          # restow one package
-  ./bootstrap.sh --list-packages          # show package names
-
-Backups of replaced files (if any):
+  Re-run safely:
+    ./bootstrap.sh --skip-brew              # restow all packages
+    ./bootstrap.sh --skip-brew zsh          # restow one package
+    ./bootstrap.sh --list-packages          # show package names
 EOF
-  if [[ -d "$BACKUP_DIR" ]]; then
-    printf '  %s\n' "$BACKUP_DIR"
-  else
-    printf '  (none — existing dotfiles were already symlinked)\n'
-  fi
+  printf '%s\n' "$RESET"
 }
 
 main() {
-  log "Dotfiles directory: ${DOTFILES_DIR}"
-  log "Home directory:     ${HOME_DIR}"
-
+  banner
   ensure_xcode_clt
 
   if (( SKIP_BREW )); then
-    warn "Skipping Homebrew/Brewfile/OMZ install steps (--skip-brew)"
+    STEP_TOTAL=1
+    warn "Skipping Homebrew, Brewfile, Oh My Zsh and shell steps (--skip-brew)"
   else
+    STEP_TOTAL=4
+    section "Homebrew packages"
     ensure_homebrew
     install_brewfile
+
+    section "Oh My Zsh"
     install_omz_customizations
+
+    section "Default shell"
     ensure_default_shell_zsh
   fi
 
+  section "Stow dotfiles"
   stow_packages
-  print_manual_steps
+  print_summary
 }
 
 main "$@"
