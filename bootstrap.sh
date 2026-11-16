@@ -158,7 +158,11 @@ ensure_homebrew() {
   fi
 
   log "Installing Homebrew"
-  run /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  if (( DRY_RUN )); then
+    run /bin/bash -c '$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)'
+    return
+  fi
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
   # Apple Silicon default path; harmless if already on PATH.
   if [[ -x /opt/homebrew/bin/brew ]]; then
@@ -204,7 +208,12 @@ install_oh_my_zsh() {
     ok "Oh My Zsh"
   else
     log "Installing Oh My Zsh"
-    run env RUNZSH=no CHSH=no KEEP_ZSHRC=yes \
+    if (( DRY_RUN )); then
+      run env RUNZSH=no CHSH=no KEEP_ZSHRC=yes \
+        sh -c '$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)'
+      return
+    fi
+    env RUNZSH=no CHSH=no KEEP_ZSHRC=yes \
       sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
   fi
 }
