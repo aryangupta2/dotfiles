@@ -19,9 +19,13 @@ STOW_PACKAGES=(zsh git config cursor agents)
 
 SKIP_BREW=0
 DRY_RUN=0
+ASSUME_YES=0
+[[ -n "${NONINTERACTIVE:-}" ]] && ASSUME_YES=1
 REQUESTED_PACKAGES=()
 SELECTED_PACKAGES=()
 DONE_ITEMS=()
+PICKED=()
+CHOICE=0
 STEP_INDEX=0
 STEP_TOTAL=0
 
@@ -58,6 +62,115 @@ banner() {
   printf '\n'
 }
 
+ask() { printf '  %s?%s %s ' "$CYAN" "$RESET" "$*"; }
+
+ask_yn() {
+  local question="$1" default="${2:-Y}" hint reply
+
+  if [[ "$default" == Y ]]; then hint="Y/n"; else hint="y/N"; fi
+  while true; do
+    ask "${question} ${DIM}[${hint}]${RESET}"
+    IFS= read -r reply || reply=""
+    case "${reply:-$default}" in
+      [Yy]|[Yy][Ee][Ss]) return 0 ;;
+      [Nn]|[Nn][Oo]) return 1 ;;
+    esac
+    warn "Please answer y or n."
+  done
+}
+
+# Leaves the 1-based index of the chosen option in CHOICE.
+choose_one() {
+  local question="$1"
+  shift
+  local -a options=("$@")
+  local i reply
+
+  printf '\n  %s%s%s\n' "$BOLD" "$question" "$RESET"
+  for i in "${!options[@]}"; do
+    printf '  %s%d)%s %s\n' "$CYAN" $((i + 1)) "$RESET" "${options[i]}"
+  done
+  while true; do
+    ask "Choose 1-${#options[@]} ${DIM}[1]${RESET}"
+    IFS= read -r reply || reply=""
+    reply="${reply:-1}"
+    if [[ "$reply" =~ ^[0-9]+$ ]] && (( reply >= 1 && reply <= ${#options[@]} )); then
+      CHOICE="$reply"
+      return
+    fi
+    warn "Enter a number between 1 and ${#options[@]}."
+  done
+}
+
+# Items are "name<TAB>description" and all start selected. Leaves the selected
+# names in PICKED (bash 3.2 functions cannot return arrays).
+pick_many() {
+  local title="$1"
+  shift
+  local -a names=() descs=() state=() tokens=()
+  local item name i n lo hi token reply mark desc selected
+  local width=0 count=$# drawn=0 rows=0 cols=80 redraw=0
+
+  for item in "$@"; do
+    name="${item%%$'\t'*}"
+    names+=("$name")
+    if [[ "$item" == *$'\t'* ]]; then descs+=("${item#*$'\t'}"); else descs+=(""); fi
+    state+=(1)
+    if (( ${#name} > width )); then width=${#name}; fi
+  done
+
+  read -r rows cols < <(stty size 2>/dev/null </dev/tty || echo "0 80")
+  # Redraw in place only when colors (and so a terminal) are on and the list fits on screen.
+  if [[ -n "$RESET" ]] && (( count + 6 < rows )); then
+    redraw=1
+  fi
+
+  while true; do
+    if (( redraw && drawn )); then
+      printf '\033[%dA\033[J' "$drawn"
+    fi
+
+    selected=0
+    for i in "${!state[@]}"; do
+      if (( state[i] )); then selected=$((selected + 1)); fi
+    done
+    printf '\n  %s%s%s %s(%d of %d selected)%s\n' "$BOLD" "$title" "$RESET" "$DIM" "$selected" "$count" "$RESET"
+    for i in "${!names[@]}"; do
+      if (( state[i] )); then mark="${GREEN}[x]${RESET}"; else mark="${DIM}[ ]${RESET}"; fi
+      desc="${descs[i]:0:$((cols - width - 14 > 0 ? cols - width - 14 : 0))}"
+      printf '  %s %s%2d%s  %-*s  %s%s%s\n' "$mark" "$DIM" $((i + 1)) "$RESET" "$width" "${names[i]}" "$DIM" "$desc" "$RESET"
+    done
+    ask "Toggle numbers (e.g. 2 5-7), a = all, n = none, Enter = done:"
+    drawn=$((count + 3))
+
+    IFS= read -r reply || reply=""
+    read -r -a tokens <<< "${reply//,/ }" || true
+    (( ${#tokens[@]} )) || break
+
+    for token in "${tokens[@]}"; do
+      case "$token" in
+        a|A) for i in "${!state[@]}"; do state[i]=1; done; continue ;;
+        n|N) for i in "${!state[@]}"; do state[i]=0; done; continue ;;
+        *-*) lo="${token%-*}" hi="${token#*-}" ;;
+        *) lo="$token" hi="$token" ;;
+      esac
+      if [[ ! "$lo" =~ ^[0-9]+$ || ! "$hi" =~ ^[0-9]+$ ]] || (( lo < 1 || hi > count || lo > hi )); then
+        warn "Ignoring '${token}' (use numbers 1-${count})"
+        drawn=$((drawn + 1))
+        continue
+      fi
+      for (( n = lo; n <= hi; n++ )); do
+        state[n - 1]=$(( 1 - state[n - 1] ))
+      done
+    done
+  done
+
+  PICKED=()
+  for i in "${!names[@]}"; do
+    if (( state[i] )); then PICKED+=("${names[i]}"); fi
+  done
+}
+
 run() {
   if (( DRY_RUN )); then
     printf '  %s[dry-run] %s%s\n' "$DIM" "$*" "$RESET"
@@ -75,6 +188,7 @@ Install Homebrew packages and symlink dotfiles with GNU Stow.
 Options:
   --skip-brew       Skip Homebrew, Brewfile, and Oh My Zsh setup
   --dry-run         Print actions without changing anything
+  -y, --yes         Skip prompts and use defaults (same as NONINTERACTIVE=1)
   --list-packages   List available stow packages and exit
   -h, --help        Show this help
 
@@ -105,6 +219,7 @@ parse_args() {
     case "$arg" in
       --skip-brew) SKIP_BREW=1 ;;
       --dry-run)   DRY_RUN=1 ;;
+      -y|--yes)    ASSUME_YES=1 ;;
       --list-packages) list_packages; exit 0 ;;
       -h|--help)   usage 0 ;;
       -*) die "Unknown option: $arg (try --help)" ;;
