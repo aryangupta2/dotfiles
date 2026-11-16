@@ -20,7 +20,7 @@ Run with no arguments, `bootstrap.sh` is interactive:
 4. Lets you pick which stow packages to link.
 5. Shows the plan and asks: proceed, dry run, or cancel. After a dry run it offers to run for real.
 
-In menus, type numbers or ranges to toggle (`2 5-7`), `a` for all, `n` for none, and Enter to continue.
+Menus are checkbox lists: `↑`/`↓` (or `j`/`k`) to move, space to toggle, `a` for all, `n` for none, Enter to confirm. Long lists scroll. If there's no keyboard (input piped in), they fall back to typing numbers or ranges (`2 5-7`).
 
 To skip the menus and install everything, run `./bootstrap.sh --yes` (or set `NONINTERACTIVE=1`). Passing any flag or package name also skips the menus.
 

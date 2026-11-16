@@ -38,6 +38,10 @@ BREW_NAMES=()
 BREW_DESCS=()
 BREW_SELECTED=()
 BREW_PICK_COUNT=-1
+TMP_BREWFILE=""
+CURSOR_HIDDEN=0
+STTY_SAVED=""
+FIT_DESC=""
 REQUESTED_PACKAGES=()
 SELECTED_PACKAGES=()
 DONE_ITEMS=()
@@ -78,6 +82,13 @@ banner() {
   fi
   printf '\n'
 }
+
+cleanup() {
+  if (( CURSOR_HIDDEN )); then printf '\033[?25h\n'; fi
+  if [[ -n "$STTY_SAVED" ]]; then stty "$STTY_SAVED" </dev/tty; fi
+  if [[ -n "$TMP_BREWFILE" ]]; then rm -f "$TMP_BREWFILE"; fi
+}
+trap cleanup EXIT
 
 ask() { printf '  %s?%s %s ' "$CYAN" "$RESET" "$*"; }
 
@@ -120,13 +131,17 @@ choose_one() {
 }
 
 # Items are "name<TAB>description" and all start selected. Leaves the selected
-# names in PICKED (bash 3.2 functions cannot return arrays).
+# names in PICKED (bash 3.2 functions cannot return arrays). The pick_many_*
+# front ends read and update these locals through bash's dynamic scoping.
 pick_many() {
   local title="$1"
   shift
-  local -a names=() descs=() state=() tokens=()
-  local item name i n lo hi token reply mark desc selected
-  local width=0 count=$# drawn=0 rows=0 cols=80 redraw=0 desc_max
+  local -a names=() descs=() state=()
+  local item name i selected
+  local width=0 count=$# rows=0 cols=80 desc_max
+
+  PICKED=()
+  if (( count == 0 )); then return; fi
 
   for item in "$@"; do
     name="${item%%$'\t'*}"
@@ -139,6 +154,119 @@ pick_many() {
   read -r rows cols < <(stty size 2>/dev/null </dev/tty || echo "0 80")
   if (( cols <= 0 )); then cols=80; fi
   desc_max=$((cols - width - 14))
+
+  if [[ -t 0 && -t 1 ]] && (( rows >= 10 )); then
+    pick_many_keys
+  else
+    pick_many_numbers
+  fi
+
+  for i in "${!names[@]}"; do
+    if (( state[i] )); then PICKED+=("${names[i]}"); fi
+  done
+}
+
+count_selected() {
+  local i
+  selected=0
+  for i in "${!state[@]}"; do
+    if (( state[i] )); then selected=$((selected + 1)); fi
+  done
+}
+
+# Sets FIT_DESC (no subshell, so a Ctrl-C mid-redraw reaches the main shell).
+fit_desc() {
+  FIT_DESC="$1"
+  if (( desc_max <= 1 )); then
+    FIT_DESC=""
+  elif (( ${#FIT_DESC} > desc_max )); then
+    FIT_DESC="${FIT_DESC:0:$((desc_max - 1))}…"
+  fi
+}
+
+# Reads one key into the named variable. Bash 3.2 makes `read` return >128 on
+# Ctrl-C instead of exiting, so treat that as an interrupt; EOF counts as Enter.
+read_key() {
+  local status=0
+  IFS= read -rsn1 "$1" || status=$?
+  if (( status > 128 )); then exit 130; fi
+  if (( status )); then eval "$1=''"; fi
+}
+
+# Checkbox list: arrows or j/k move, space toggles, a/n select all/none, Enter confirms.
+pick_many_keys() {
+  local cursor=0 top=0 height drawn=0 row key rest pointer mark label
+
+  height=$((rows - 8))
+  if (( height > count )); then height=$count; fi
+
+  # Character mode for the whole menu, so keys typed between reads (like the
+  # rest of an arrow-key escape sequence) are never held in the line buffer.
+  STTY_SAVED="$(stty -g </dev/tty)"
+  stty -echo -icanon min 1 time 0 </dev/tty
+  printf '\033[?25l'
+  CURSOR_HIDDEN=1
+
+  while true; do
+    if (( cursor < top )); then top=$cursor; fi
+    if (( cursor >= top + height )); then top=$((cursor - height + 1)); fi
+    if (( drawn )); then printf '\033[%dA\033[J' "$drawn"; fi
+
+    count_selected
+    printf '\n  %s%s%s  %s%d of %d selected%s\n' "$BOLD" "$title" "$RESET" "$DIM" "$selected" "$count" "$RESET"
+    printf '  %s↑/↓ move · space toggle · a all · n none · enter confirm%s\n' "$DIM" "$RESET"
+    if (( top > 0 )); then printf '  %s  ↑ %d more%s\n' "$DIM" "$top" "$RESET"; else printf '\n'; fi
+
+    for (( row = top; row < top + height; row++ )); do
+      if (( state[row] )); then mark="${GREEN}[x]${RESET}"; else mark="${DIM}[ ]${RESET}"; fi
+      if (( row == cursor )); then
+        pointer="${CYAN}›${RESET}"
+        printf -v label '%s%s%-*s%s' "$BOLD" "$CYAN" "$width" "${names[row]}" "$RESET"
+      else
+        pointer=" "
+        printf -v label '%-*s' "$width" "${names[row]}"
+      fi
+      fit_desc "${descs[row]}"
+      printf '  %s %s %s  %s%s%s\n' "$pointer" "$mark" "$label" "$DIM" "$FIT_DESC" "$RESET"
+    done
+
+    if (( top + height < count )); then
+      printf '  %s  ↓ %d more%s\n' "$DIM" $((count - top - height)) "$RESET"
+    else
+      printf '\n'
+    fi
+    drawn=$((height + 5))
+
+    read_key key
+    if [[ "$key" == $'\033' ]]; then
+      read_key rest
+      key+="$rest"
+      read_key rest
+      key+="$rest"
+    fi
+    case "$key" in
+      $'\033[A'|$'\033OA'|k) cursor=$(( (cursor - 1 + count) % count )) ;;
+      $'\033[B'|$'\033OB'|j) cursor=$(( (cursor + 1) % count )) ;;
+      ' '|x) state[cursor]=$(( 1 - state[cursor] )) ;;
+      a|A) for row in "${!state[@]}"; do state[row]=1; done ;;
+      n|N) for row in "${!state[@]}"; do state[row]=0; done ;;
+      '') break ;;
+    esac
+  done
+
+  printf '\033[%dA\033[J\033[?25h' "$drawn"
+  CURSOR_HIDDEN=0
+  stty "$STTY_SAVED" </dev/tty
+  STTY_SAVED=""
+  count_selected
+  ok "${title}: ${selected} of ${count} selected"
+}
+
+# Fallback when there's no keyboard: type numbers or ranges to toggle.
+pick_many_numbers() {
+  local -a tokens=()
+  local i n lo hi token reply mark drawn=0 redraw=0
+
   # Redraw in place only when colors (and so a terminal) are on and the list fits on screen.
   if [[ -n "$RESET" ]] && (( count + 6 < rows )); then
     redraw=1
@@ -149,20 +277,12 @@ pick_many() {
       printf '\033[%dA\033[J' "$drawn"
     fi
 
-    selected=0
-    for i in "${!state[@]}"; do
-      if (( state[i] )); then selected=$((selected + 1)); fi
-    done
+    count_selected
     printf '\n  %s%s%s %s(%d of %d selected)%s\n' "$BOLD" "$title" "$RESET" "$DIM" "$selected" "$count" "$RESET"
     for i in "${!names[@]}"; do
       if (( state[i] )); then mark="${GREEN}[x]${RESET}"; else mark="${DIM}[ ]${RESET}"; fi
-      desc="${descs[i]}"
-      if (( desc_max <= 1 )); then
-        desc=""
-      elif (( ${#desc} > desc_max )); then
-        desc="${desc:0:$((desc_max - 1))}…"
-      fi
-      printf '  %s %s%2d%s  %-*s  %s%s%s\n' "$mark" "$DIM" $((i + 1)) "$RESET" "$width" "${names[i]}" "$DIM" "$desc" "$RESET"
+      fit_desc "${descs[i]}"
+      printf '  %s %s%2d%s  %-*s  %s%s%s\n' "$mark" "$DIM" $((i + 1)) "$RESET" "$width" "${names[i]}" "$DIM" "$FIT_DESC" "$RESET"
     done
     ask "Toggle numbers (e.g. 2 5-7), a = all, n = none, Enter = done:"
     drawn=$((count + 3))
@@ -187,11 +307,6 @@ pick_many() {
         state[n - 1]=$(( 1 - state[n - 1] ))
       done
     done
-  done
-
-  PICKED=()
-  for i in "${!names[@]}"; do
-    if (( state[i] )); then PICKED+=("${names[i]}"); fi
   done
 }
 
@@ -418,8 +533,8 @@ write_selected_brewfile() {
     return
   fi
 
-  BREWFILE_TO_INSTALL="$(mktemp -t dotfiles-Brewfile)"
-  trap 'rm -f "$BREWFILE_TO_INSTALL"' EXIT
+  TMP_BREWFILE="$(mktemp -t dotfiles-Brewfile)"
+  BREWFILE_TO_INSTALL="$TMP_BREWFILE"
   {
     if (( ${#BREW_TAPS[@]} )); then printf '%s\n' "${BREW_TAPS[@]}"; fi
     for i in "${!BREW_LINES[@]}"; do
