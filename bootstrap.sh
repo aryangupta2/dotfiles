@@ -27,6 +27,15 @@ RUN_OMZ=1
 RUN_SHELL=1
 RUN_STOW=1
 INSTALL_STOW=0
+BREWFILE="${DOTFILES_DIR}/Brewfile"
+BREWFILE_TO_INSTALL="$BREWFILE"
+BREW_TAPS=()
+BREW_LINES=()
+BREW_KINDS=()
+BREW_NAMES=()
+BREW_DESCS=()
+BREW_SELECTED=()
+BREW_PICK_COUNT=-1
 REQUESTED_PACKAGES=()
 SELECTED_PACKAGES=()
 DONE_ITEMS=()
@@ -115,7 +124,7 @@ pick_many() {
   shift
   local -a names=() descs=() state=() tokens=()
   local item name i n lo hi token reply mark desc selected
-  local width=0 count=$# drawn=0 rows=0 cols=80 redraw=0
+  local width=0 count=$# drawn=0 rows=0 cols=80 redraw=0 desc_max
 
   for item in "$@"; do
     name="${item%%$'\t'*}"
@@ -127,6 +136,7 @@ pick_many() {
 
   read -r rows cols < <(stty size 2>/dev/null </dev/tty || echo "0 80")
   if (( cols <= 0 )); then cols=80; fi
+  desc_max=$((cols - width - 14))
   # Redraw in place only when colors (and so a terminal) are on and the list fits on screen.
   if [[ -n "$RESET" ]] && (( count + 6 < rows )); then
     redraw=1
@@ -144,7 +154,12 @@ pick_many() {
     printf '\n  %s%s%s %s(%d of %d selected)%s\n' "$BOLD" "$title" "$RESET" "$DIM" "$selected" "$count" "$RESET"
     for i in "${!names[@]}"; do
       if (( state[i] )); then mark="${GREEN}[x]${RESET}"; else mark="${DIM}[ ]${RESET}"; fi
-      desc="${descs[i]:0:$((cols - width - 14 > 0 ? cols - width - 14 : 0))}"
+      desc="${descs[i]}"
+      if (( desc_max <= 1 )); then
+        desc=""
+      elif (( ${#desc} > desc_max )); then
+        desc="${desc:0:$((desc_max - 1))}…"
+      fi
       printf '  %s %s%2d%s  %-*s  %s%s%s\n' "$mark" "$DIM" $((i + 1)) "$RESET" "$width" "${names[i]}" "$DIM" "$desc" "$RESET"
     done
     ask "Toggle numbers (e.g. 2 5-7), a = all, n = none, Enter = done:"
@@ -297,10 +312,118 @@ ensure_homebrew() {
 }
 
 install_brewfile() {
+  if (( BREW_PICK_COUNT == 0 )); then
+    ok "No Brewfile entries selected"
+    return
+  fi
+
   log "Installing packages from Brewfile"
-  run brew bundle install --file="${DOTFILES_DIR}/Brewfile"
+  run brew bundle install --file="$BREWFILE_TO_INSTALL"
   ok "Brewfile installed"
-  DONE_ITEMS+=("Homebrew packages from Brewfile")
+  if (( BREW_PICK_COUNT > 0 )); then
+    DONE_ITEMS+=("Homebrew packages: ${BREW_PICK_COUNT} of ${#BREW_LINES[@]} Brewfile entries")
+  else
+    DONE_ITEMS+=("Homebrew packages from Brewfile")
+  fi
+}
+
+# Splits the Brewfile into taps and installable entries; the comment line above
+# an entry becomes its description.
+parse_brewfile() {
+  local line comment="" name
+
+  BREW_TAPS=() BREW_LINES=() BREW_KINDS=() BREW_NAMES=() BREW_DESCS=()
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    case "$line" in
+      '#'*)
+        comment="${line#\#}"
+        comment="${comment# }"
+        continue
+        ;;
+      tap\ *)
+        BREW_TAPS+=("$line")
+        ;;
+      brew\ *|cask\ *|vscode\ *)
+        name="${line#*\"}"
+        BREW_LINES+=("$line")
+        BREW_KINDS+=("${line%% *}")
+        BREW_NAMES+=("${name%%\"*}")
+        BREW_DESCS+=("$comment")
+        ;;
+    esac
+    comment=""
+  done < "$BREWFILE"
+}
+
+pick_brewfile_entries() {
+  local kind title i name
+  local -a items
+
+  parse_brewfile
+  BREW_SELECTED=()
+  for i in "${!BREW_LINES[@]}"; do BREW_SELECTED+=(0); done
+
+  for kind in brew cask vscode; do
+    case "$kind" in
+      brew)   title="Command-line tools (brew)" ;;
+      cask)   title="Apps (cask)" ;;
+      vscode) title="Editor extensions (vscode)" ;;
+    esac
+
+    items=()
+    for i in "${!BREW_LINES[@]}"; do
+      if [[ "${BREW_KINDS[i]}" == "$kind" ]]; then
+        items+=("${BREW_NAMES[i]}"$'\t'"${BREW_DESCS[i]}")
+      fi
+    done
+    if (( ${#items[@]} == 0 )); then continue; fi
+
+    pick_many "$title" "${items[@]}"
+    for i in "${!BREW_LINES[@]}"; do
+      if [[ "${BREW_KINDS[i]}" != "$kind" ]]; then continue; fi
+      for name in ${PICKED[@]+"${PICKED[@]}"}; do
+        if [[ "$name" == "${BREW_NAMES[i]}" ]]; then
+          BREW_SELECTED[i]=1
+          break
+        fi
+      done
+    done
+  done
+}
+
+# Stowing needs GNU stow, so keep it selected when it isn't installed yet.
+require_stow_formula() {
+  local i
+
+  for i in "${!BREW_LINES[@]}"; do
+    if [[ "${BREW_KINDS[i]}" == brew && "${BREW_NAMES[i]}" == stow ]] && (( !BREW_SELECTED[i] )); then
+      warn "Keeping stow selected: it is needed for the stow step"
+      BREW_SELECTED[i]=1
+    fi
+  done
+}
+
+write_selected_brewfile() {
+  local i
+
+  BREW_PICK_COUNT=0
+  for i in "${!BREW_SELECTED[@]}"; do
+    BREW_PICK_COUNT=$((BREW_PICK_COUNT + BREW_SELECTED[i]))
+  done
+
+  if (( BREW_PICK_COUNT == ${#BREW_LINES[@]} )); then
+    BREWFILE_TO_INSTALL="$BREWFILE"
+    return
+  fi
+
+  BREWFILE_TO_INSTALL="$(mktemp -t dotfiles-Brewfile)"
+  trap 'rm -f "$BREWFILE_TO_INSTALL"' EXIT
+  {
+    if (( ${#BREW_TAPS[@]} )); then printf '%s\n' "${BREW_TAPS[@]}"; fi
+    for i in "${!BREW_LINES[@]}"; do
+      if (( BREW_SELECTED[i] )); then printf '%s\n' "${BREW_LINES[i]}"; fi
+    done
+  } > "$BREWFILE_TO_INSTALL"
 }
 
 ensure_default_shell_zsh() {
@@ -554,7 +677,18 @@ pkg_desc() {
 
 print_plan() {
   printf '\n  %sPlan%s\n' "$BOLD" "$RESET"
-  if (( RUN_BREW )); then log "Install Homebrew packages from the Brewfile"; fi
+  local i
+  local -a names=()
+
+  if (( RUN_BREW )); then
+    log "Install Homebrew, plus ${BREW_PICK_COUNT} of ${#BREW_LINES[@]} Brewfile entries"
+    if (( BREW_PICK_COUNT > 0 && BREW_PICK_COUNT < ${#BREW_LINES[@]} )); then
+      for i in "${!BREW_LINES[@]}"; do
+        if (( BREW_SELECTED[i] )); then names+=("${BREW_NAMES[i]}"); fi
+      done
+      printf '    %s%s%s\n' "$DIM" "${names[*]}" "$RESET"
+    fi
+  fi
   if (( RUN_OMZ )); then log "Install Oh My Zsh, powerlevel10k and plugins"; fi
   if (( RUN_SHELL )); then log "Make zsh the default shell"; fi
   if (( RUN_STOW )); then
@@ -584,6 +718,10 @@ interactive_setup() {
     esac
   done
 
+  if (( RUN_BREW )); then
+    pick_brewfile_entries
+  fi
+
   if (( RUN_STOW )); then
     for pkg in "${STOW_PACKAGES[@]}"; do
       items+=("${pkg}"$'\t'"$(pkg_desc "$pkg")")
@@ -607,6 +745,13 @@ interactive_setup() {
       warn "Skipping the stow step"
       RUN_STOW=0
     fi
+  fi
+
+  if (( RUN_BREW )); then
+    if (( RUN_STOW )) && ! command -v stow &>/dev/null; then
+      require_stow_formula
+    fi
+    write_selected_brewfile
   fi
 
   if (( RUN_BREW + RUN_OMZ + RUN_SHELL + RUN_STOW == 0 )); then
