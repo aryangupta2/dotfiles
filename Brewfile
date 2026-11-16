@@ -10,8 +10,6 @@ brew "fzf"
 brew "gh"
 # Distributed revision control system
 brew "git"
-# Simple terminal UI for git commands
-brew "lazygit"
 # Modern and intuitive terminal-based text editor
 brew "micro"
 # Organize software neatly under a single directory tree (e.g. /usr/local)
